@@ -12,11 +12,12 @@ from omegaconf import ListConfig, OmegaConf
 from tinygrad.nn.state import safe_save, safe_load, get_state_dict, load_state_dict
 
 from act import *
+from utils import clip_grad_norm_
 
 # Start of training code
 
 # Create a directory to store the training checkpoint.
-output_directory = Path("outputs/train/example_pusht")
+output_directory = Path("outputs/train/aloha_sim_insertion_human")
 output_directory.mkdir(parents=True, exist_ok=True)
 
 # Number of offline training steps (we'll only do offline training for this example.)
@@ -33,6 +34,7 @@ print(dataset.stats)
 
 cfg = ACTConfig()
 policy = ACTPolicy(cfg, dataset_stats=dataset.stats)
+policy.reset()
 
 params_not_backbone = [p for n, p in nn.state.get_state_dict(policy).items() if p.requires_grad != False and not n.startswith("model.backbone")]
 params_backbone = [p for n, p in nn.state.get_state_dict(policy).items() if p.requires_grad != False and n.startswith("model.backbone")]
@@ -51,16 +53,23 @@ opt_backbone = nn.optim.AdamW(params_backbone, lr=1e-5, weight_decay=1e-4)
 
 #@TinyJit
 @Tensor.train()
-def train_step(batch) -> Tensor:
+def train_step(batch):
     Tensor.training = True
     output_dict = policy(batch)
     loss = output_dict["loss"]
     opt.zero_grad()
     opt_backbone.zero_grad()
     loss.backward()
+    grad_norm_not_backbone = clip_grad_norm_(params_not_backbone, 10.0)
+    grad_norm_backbone = clip_grad_norm_(params_backbone, 10.0)
     opt.step()
     opt_backbone.step()
-    return loss
+    info = {
+        "loss": loss.item(),
+        "grad_norm_backbone": grad_norm_backbone,
+        "grad_norm_not_backbone": grad_norm_not_backbone
+    }
+    return info
 
 print(f'Starting training loop')
 # Create dataloader for offline training.
@@ -79,13 +88,18 @@ with Tensor.train():
     while not done:
         for batch in dataloader:
             batch = {k: Tensor(v.numpy(), requires_grad=False) for k, v in batch.items()}
-            loss = train_step(batch)
+            info = train_step(batch)
+            loss = info["loss"]
+            grad_norm_backbone = info["grad_norm_backbone"]
+            grad_norm_not_backbone = info["grad_norm_not_backbone"]
         
             if step % log_freq == 0:
-                print(f"step: {step} loss: {loss.numpy():.3f}")
+                print(f"step: {step} loss: {loss:.3f}")
+                print(f"grad_norm_backbone: {grad_norm_backbone.numpy():.3f}")
+                print(f"grad_norm_not_backbone: {grad_norm_not_backbone.numpy():.3f}")
             step += 1
 
-            if step % 10000 == 0:
+            if step % 20000 == 0:
                 try:
                     state_dict = get_state_dict(policy)
                     safe_save(state_dict, f'{output_directory}/model_{step}.safetensors')
