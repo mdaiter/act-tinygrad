@@ -59,7 +59,7 @@ else:
 
 #@TinyJit
 @Tensor.train()
-def train_step(batch):
+def train_step(batch: dict[str, Tensor]) -> dict[str, float]:
     Tensor.training = True
     output_dict = policy(batch)
     loss = output_dict["loss"]
@@ -110,7 +110,7 @@ with Tensor.train():
                 print(f"grad_norm_not_backbone: {grad_norm_not_backbone.numpy():.3f}")
             step += 1
 
-            if step % 3700 == 0 or step % 5000 or step % 150 == 0:
+            if step % 3700 == 0 or step % 5000 == 0 or step % 150 == 0:
                 try:
                     state_dict = get_state_dict(policy)
                     safe_save(state_dict, f'{output_directory}/model_{step}.safetensors')
