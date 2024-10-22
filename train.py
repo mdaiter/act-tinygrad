@@ -36,8 +36,11 @@ cfg = ACTConfig()
 policy = ACTPolicy(cfg, dataset_stats=dataset.stats)
 policy.reset()
 
-params_not_backbone = [p for n, p in nn.state.get_state_dict(policy).items() if p.requires_grad != False and not n.startswith("model.backbone")]
-params_backbone = [p for n, p in nn.state.get_state_dict(policy).items() if p.requires_grad != False and n.startswith("model.backbone")]
+if cfg.train_backbone_separately:
+    params_not_backbone = [p for n, p in nn.state.get_state_dict(policy).items() if p.requires_grad != False and not n.startswith("model.backbone")]
+    params_backbone = [p for n, p in nn.state.get_state_dict(policy).items() if p.requires_grad != False and n.startswith("model.backbone")]
+else:
+    params_not_backbone = nn.state.get_parameters(policy)
 
 Tensor.manual_seed(1000)
 
@@ -48,8 +51,11 @@ if hasattr(cfg, 'override_dataset_stats'):
             print(f'listconfig: {listconfig}')
             dataset.stats[key][stats_type] = torch.tensor(listconfig, dtype=torch.float32)
 
-opt = nn.optim.AdamW(params_not_backbone, lr=1e-5, weight_decay=1e-4)
-opt_backbone = nn.optim.AdamW(params_backbone, lr=1e-5, weight_decay=1e-4)
+if cfg.train_backbone_separately == True:
+    opt = nn.optim.AdamW(params_not_backbone, lr=1e-5, weight_decay=1e-4)
+    opt_backbone = nn.optim.AdamW(params_backbone, lr=1e-5, weight_decay=1e-4)
+else:
+   opt = nn.optim.AdamW(params_not_backbone, lr=1e-5, weight_decay=1e-4)
 
 #@TinyJit
 @Tensor.train()
@@ -58,15 +64,20 @@ def train_step(batch):
     output_dict = policy(batch)
     loss = output_dict["loss"]
     opt.zero_grad()
-    opt_backbone.zero_grad()
+    if cfg.train_backbone_separately:
+        opt_backbone.zero_grad()
     loss.backward()
-    grad_norm_not_backbone = clip_grad_norm_(params_not_backbone, 10.0)
-    grad_norm_backbone = clip_grad_norm_(params_backbone, 10.0)
+    if cfg.train_backbone_separately:
+        grad_norm_not_backbone = clip_grad_norm_(params_not_backbone, 10.0)
+        grad_norm_backbone = clip_grad_norm_(params_backbone, 10.0)
+    else:
+        grad_norm_not_backbone = clip_grad_norm_(params_not_backbone, 10.0)
     opt.step()
-    opt_backbone.step()
+    if cfg.train_backbone_separately:
+        opt_backbone.step()
     info = {
         "loss": loss.item(),
-        "grad_norm_backbone": grad_norm_backbone,
+        "grad_norm_backbone": grad_norm_backbone if cfg.train_backbone_separately else grad_norm_not_backbone,
         "grad_norm_not_backbone": grad_norm_not_backbone
     }
     return info
@@ -99,7 +110,7 @@ with Tensor.train():
                 print(f"grad_norm_not_backbone: {grad_norm_not_backbone.numpy():.3f}")
             step += 1
 
-            if step % 4000 == 0:
+            if step % 3700 == 0 or step % 5000 == 0:
                 try:
                     state_dict = get_state_dict(policy)
                     safe_save(state_dict, f'{output_directory}/model_{step}.safetensors')
