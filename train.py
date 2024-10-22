@@ -99,7 +99,7 @@ with Tensor.train():
                 print(f"grad_norm_not_backbone: {grad_norm_not_backbone.numpy():.3f}")
             step += 1
 
-            if step % 20000 == 0:
+            if step % 4000 == 0:
                 try:
                     state_dict = get_state_dict(policy)
                     safe_save(state_dict, f'{output_directory}/model_{step}.safetensors')
