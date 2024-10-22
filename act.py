@@ -119,7 +119,7 @@ class ACT:
         self._reset_parameters()
 
         # CHANGE THIS WHEN RUNNING.
-        self.training=False
+        self.training=True
 
     def _reset_parameters(self):
         """Xavier-uniform initialization of the transformer parameters as in the original code."""
