@@ -119,7 +119,7 @@ class ACT:
         self._reset_parameters()
 
         # CHANGE THIS WHEN RUNNING.
-        self.training=True
+        self.training=False
 
     def _reset_parameters(self):
         """Xavier-uniform initialization of the transformer parameters as in the original code."""
@@ -446,7 +446,6 @@ class ACTPolicy:
         queue is empty.
         """
         Tensor.no_grad = True
-        self.eval()
 
         batch = self.normalize_inputs(batch)
         if len(self.expected_image_keys) > 0:
