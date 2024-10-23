@@ -137,7 +137,14 @@ class ACT:
                     return Tensor.uniform(*tensor.shape, low=-a, high=a)
                 p = xavier_uniform_(p)
 
-    def __call__(self, batch: dict[str, Tensor]) -> tuple[Tensor, tuple[Tensor, Tensor] | tuple[None, None]]:
+    def __call__(
+            self, 
+            observation_state: Tensor | None = None,
+            observation_images: Tensor | None = None,
+            observation_environment_state: Tensor | None = None,
+            action: Tensor | None = None,
+            action_is_pad: Tensor | None = None
+        ) -> tuple[Tensor, tuple[Tensor, Tensor] | tuple[None, None]]:
         """A forward pass through the Action Chunking Transformer (with optional VAE encoder).
 
         `batch` should have the following structure:
@@ -158,25 +165,26 @@ class ACT:
         """
         if self.config.use_vae and self.training:
             assert (
-                "action" in batch
+                action is not None
             ), "actions must be provided when using the variational objective in training mode."
 
         batch_size = (
-            batch["observation.images"]
-            if "observation.images" in batch
-            else batch["observation.environment_state"]
+            observation_images
+            if observation_images is not None
+            else observation_environment_state
         ).shape[0]
 
-        print(f'batch_size: {batch_size}')
+        print(f'batch_size: {batch_size}. Using observation_images? {observation_images is not None}')
+        print(f'using vae? {self.config.use_vae and action is not None}')
 
         # Prepare the latent for input to the transformer encoder.
-        if self.config.use_vae and "action" in batch:
+        if self.config.use_vae and action is not None:
             # Prepare the input to the VAE encoder: [cls, *joint_space_configuration, *action_sequence].
             cls_embed = self.vae_encoder_cls_embed.weight.repeat(batch_size, 1, 1) # (B, 1, D)
             if self.use_robot_state:
-                robot_state_embed = self.vae_encoder_robot_state_input_proj(batch["observation.state"])
+                robot_state_embed = self.vae_encoder_robot_state_input_proj(observation_state)
                 robot_state_embed = robot_state_embed.unsqueeze(1)  # (B, 1, D)
-            action_embed = self.vae_encoder_action_input_proj(batch["action"])  # (B, S, D)
+            action_embed = self.vae_encoder_action_input_proj(action)  # (B, S, D)
 
             if self.use_robot_state:
                 vae_encoder_input = [cls_embed, robot_state_embed, action_embed]  # (B, S+2, D)
@@ -196,7 +204,7 @@ class ACT:
                 fill_value=False
             )
             key_padding_mask = Tensor.cat(
-                cls_joint_is_pad, batch["action_is_pad"], dim=1
+                cls_joint_is_pad, action_is_pad, dim=1
             )  # (bs, seq+1 or 2)
 
             print(f'vae_encoder_input.shape: {vae_encoder_input.shape}')
@@ -230,11 +238,11 @@ class ACT:
         encoder_in_pos_embed = list(self.encoder_1d_feature_pos_embed.weight.unsqueeze(1))
         # Robot state token.
         if self.use_robot_state:
-            encoder_in_tokens.append(self.encoder_robot_state_input_proj(batch["observation.state"]))
+            encoder_in_tokens.append(self.encoder_robot_state_input_proj(observation_state))
         # Environment state token.
         if self.use_env_state:
             encoder_in_tokens.append(
-                self.encoder_env_state_input_proj(batch["observation.environment_state"])
+                self.encoder_env_state_input_proj(observation_environment_state)
             )
 
         # Camera observation features and positional embeddings.
@@ -242,8 +250,8 @@ class ACT:
             all_cam_features = []
             all_cam_pos_embeds = []
 
-            for cam_index in range(batch["observation.images"].shape[-4]):
-                cam_features = self.backbone(batch["observation.images"][:, cam_index])  #["feature_map"]
+            for cam_index in range(observation_images.shape[-4]):
+                cam_features = self.backbone(observation_images[:, cam_index])  #["feature_map"]
                 print(f'backbone output: {cam_features.shape}')
                 # TODO(rcadene, alexander-soare): remove call to `.to` to speedup forward ; precompute and use
                 # buffer
@@ -464,7 +472,13 @@ class ACTPolicy:
         # Action queue logic for n_action_steps > 1. When the action_queue is depleted, populate it by
         # querying the policy.
         if len(self._action_queue) == 0:
-            actions = self.model(batch)[0][:, : self.config.n_action_steps]
+            actions = self.model(
+                batch["observation.state"].realize(),
+                batch["observation.images"].realize(),
+                None,
+                None,
+                None
+            )[0][:, : self.config.n_action_steps]
 
             # TODO(rcadene): make _forward return output dictionary?
             actions = self.unnormalize_outputs({"action": actions})["action"]
@@ -476,17 +490,29 @@ class ACTPolicy:
         Tensor.no_grad = False
         return item_to_return
 
-    def __call__(self, batch: dict[str, Tensor]) -> dict[str, Tensor]:
+    def normalize_batch_inputs_and_targets(self, batch: dict[str, Tensor]) -> dict[str, Tensor]:
         """Run the batch through the model and compute the loss for training or validation."""
         batch = self.normalize_inputs(batch)
         if len(self.expected_image_keys) > 0:
             batch = dict(batch) # shallow copy so that adding a key doesn't modify the original
             batch["observation.images"] = Tensor.stack(*[batch[k] for k in self.expected_image_keys], dim=-4)
         batch = self.normalize_targets(batch)
-        actions_hat, (mu_hat, log_sigma_x2_hat) = self.model(batch)
+        return batch
+
+    def __call__(
+            self,
+            observation_state: Tensor | None = None,
+            observation_images: Tensor | None = None,
+            observation_environment_state: Tensor | None = None,
+            action: Tensor | None = None,
+            action_is_pad: Tensor | None = None
+        ) -> dict[str, Tensor]:
+        actions_hat, (mu_hat, log_sigma_x2_hat) = self.model(
+            observation_state, observation_images, observation_environment_state, action, action_is_pad
+        )
 
         l1_loss = (
-            (batch["action"] - actions_hat).abs() * batch["action_is_pad"].logical_not().int().unsqueeze(-1)
+            (action - actions_hat).abs() * action_is_pad.logical_not().int().unsqueeze(-1)
         ).mean()
 
         loss_dict = {"l1_loss": l1_loss.item()}

@@ -36,6 +36,13 @@ cfg = ACTConfig()
 policy = ACTPolicy(cfg, dataset_stats=dataset.stats)
 policy.reset()
 
+step = 0
+if (Path("./outputs/train/aloha_sim_insertion_human/model_12000.safetensors").is_file()):
+    state_dict = safe_load("/Users/msd/Code/experiments/act-tinygrad/outputs/train/aloha_sim_insertion_human/model_12000.safetensors")
+    load_state_dict(policy, state_dict)
+    step = 12000
+policy.model.training = True
+
 if cfg.train_backbone_separately:
     params_not_backbone = [p for n, p in nn.state.get_state_dict(policy).items() if p.requires_grad != False and not n.startswith("model.backbone")]
     params_backbone = [p for n, p in nn.state.get_state_dict(policy).items() if p.requires_grad != False and n.startswith("model.backbone")]
@@ -57,11 +64,17 @@ if cfg.train_backbone_separately == True:
 else:
    opt = nn.optim.AdamW(params_not_backbone, lr=1e-5, weight_decay=1e-4)
 
-#@TinyJit
+@TinyJit
 @Tensor.train()
-def train_step(batch: dict[str, Tensor]) -> dict[str, float]:
+def train_step(
+    observation_state: Tensor | None = None, 
+    observation_images: Tensor | None = None,
+    #observation_environment_state: Tensor | None = None,
+    action: Tensor | None = None,
+    action_is_pad: Tensor | None = None
+) -> dict[str, float]:
     Tensor.training = True
-    output_dict = policy(batch)
+    output_dict = policy(observation_state, observation_images, None, action, action_is_pad)
     loss = output_dict["loss"]
     opt.zero_grad()
     if cfg.train_backbone_separately:
@@ -75,12 +88,11 @@ def train_step(batch: dict[str, Tensor]) -> dict[str, float]:
     opt.step()
     if cfg.train_backbone_separately:
         opt_backbone.step()
-    info = {
-        "loss": loss.item(),
-        "grad_norm_backbone": grad_norm_backbone if cfg.train_backbone_separately else grad_norm_not_backbone,
-        "grad_norm_not_backbone": grad_norm_not_backbone
-    }
-    return info
+    return (
+        loss.realize(),
+        grad_norm_backbone.realize() if cfg.train_backbone_separately else grad_norm_not_backbone,
+        grad_norm_not_backbone.realize()
+    )
 
 print(f'Starting training loop')
 # Create dataloader for offline training.
@@ -93,24 +105,31 @@ dataloader = DataLoader(
     drop_last=True,
 )
 
-step = 0
 done = False
 with Tensor.train():
     while not done:
         for batch in dataloader:
             batch = {k: Tensor(v.numpy(), requires_grad=False) for k, v in batch.items()}
-            info = train_step(batch)
-            loss = info["loss"]
-            grad_norm_backbone = info["grad_norm_backbone"]
-            grad_norm_not_backbone = info["grad_norm_not_backbone"]
+            batch = policy.normalize_batch_inputs_and_targets(batch)
+            print(f'batch: {batch}')
+            info = train_step(
+                batch["observation.state"].realize(),
+                batch["observation.images"].realize(),
+                #batch["observation.environment_state"].realize() if "observation.environment_state" in batch else None,
+                batch["action"].realize(),
+                batch["action_is_pad"].realize()
+            )
+            loss = info[0]
+            grad_norm_backbone = info[1]
+            grad_norm_not_backbone = info[2]
         
             if step % log_freq == 0:
-                print(f"step: {step} loss: {loss:.3f}")
+                print(f"step: {step} loss: {loss.numpy():.3f}")
                 print(f"grad_norm_backbone: {grad_norm_backbone.numpy():.3f}")
                 print(f"grad_norm_not_backbone: {grad_norm_not_backbone.numpy():.3f}")
             step += 1
 
-            if step % 3700 == 0 or step % 5000 == 0 or step % 150 == 0:
+            if step % 5000 == 0:
                 try:
                     state_dict = get_state_dict(policy)
                     safe_save(state_dict, f'{output_directory}/model_{step}.safetensors')

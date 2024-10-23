@@ -1,11 +1,13 @@
 import math
 from collections import deque
 from itertools import chain
-from typing import Callable
+from typing import Callable, Optional, Union, Literal
 
 import numpy as np
 import tinygrad
 from tinygrad import Tensor, nn, dtypes
+from tinygrad.ops import Variable
+
 
 from utils import *
 
@@ -91,10 +93,6 @@ def create_sinusoidal_pos_embedding(num_positions: int, dimension: int) -> Tenso
     sinusoid_table[:, 0::2] = np.sin(sinusoid_table[:, 0::2])  # dim 2i
     sinusoid_table[:, 1::2] = np.cos(sinusoid_table[:, 1::2])  # dim 2i+1
     return Tensor(sinusoid_table).float()
-
-from tinygrad import Tensor, nn
-from typing import Optional, Union, Literal
-from tinygrad.ops import Variable
 
 class MultiheadAttention:
     def __init__(self, embed_dim, num_heads, dropout=0.0):
