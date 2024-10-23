@@ -7,8 +7,8 @@ An overview of ACT with ALOHA (low cost bimanipulation hardware): https://tonyzh
 ## Features
 * Implementation of ACT model architecture using tinygrad
 * Support for simulated robotic manipulation tasks
-* Training and (soon) evaluation scripts
-* (Soon) Integration with tinygrad's lazy evaluation and JIT compilation
+* Training and evaluation scripts
+* Integration with tinygrad's lazy evaluation and JIT compilation
 
 ## How to use
 
@@ -16,4 +16,10 @@ An overview of ACT with ALOHA (low cost bimanipulation hardware): https://tonyzh
 
 ```
 BEAM=2 DEBUG=2 python3.10 train.py
+```
+
+### Eval
+
+```
+DEBUG=2 MUJOCO_GL=glfw python3.10 test.py
 ```
