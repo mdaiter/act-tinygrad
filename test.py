@@ -18,9 +18,10 @@ output_directory = Path("outputs/eval/example_aloha")
 output_directory.mkdir(parents=True, exist_ok=True)
 
 # load the dict of safe_tensors
-state_dict = safe_load("/Users/msd/Code/experiments/act-tinygrad/outputs/train/aloha_sim_insertion_human/model_3.safetensors")
+state_dict = safe_load("/Users/msd/Code/experiments/act-tinygrad/outputs/train/aloha_sim_insertion_human/model_30000.safetensors")
 policy = ACTPolicy(ACTConfig())
 load_state_dict(policy, state_dict)
+policy.model.training = False
 
 # Initialize evaluation environment to render two observation types:
 # an image of the scene and state/position of the agent. The environment
@@ -28,13 +29,13 @@ load_state_dict(policy, state_dict)
 env = gym.make(
     "gym_aloha/AlohaInsertion-v0",
     obs_type="pixels_agent_pos",
-    max_episode_steps=400,
+    max_episode_steps=500,
     render_mode="rgb_array",
 )
 
 # Reset the policy and environmens to prepare for rollout
 policy.reset()
-numpy_observation, info = env.reset(seed=42)
+numpy_observation, info = env.reset()
 
 # Prepare to collect every rewards and all the frames of the episode,
 # from initial state to final state.
