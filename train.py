@@ -14,10 +14,17 @@ from tinygrad.nn.state import safe_save, safe_load, get_state_dict, load_state_d
 from act import *
 from utils import clip_grad_norm_
 
+import argparse
 # Start of training code
+parser=argparse.ArgumentParser(description="Argument Parser for ACT training on simulated environments")
+parser.add_argument("env_name", type=str, choices=['aloha_sim_transfer_cube_human', 'aloha_sim_insertion_human'], default='aloha_sim_insertion_human')
+parser.add_argument("--model_starting_point", type=str)
+parser.add_argument("--model_start_step_count", type=int)
+args=parser.parse_args()
+env_name = args.env_name
 
 # Create a directory to store the training checkpoint.
-output_directory = Path("outputs/train/aloha_sim_insertion_human")
+output_directory = Path(f"outputs/train/{env_name}")
 output_directory.mkdir(parents=True, exist_ok=True)
 
 # Number of offline training steps (we'll only do offline training for this example.)
@@ -29,7 +36,7 @@ log_freq = 1
 delta_timestamps = {
     "action": [i / 50.0 for i in range(100)],
 }
-dataset = LeRobotDataset('lerobot/aloha_sim_insertion_human', delta_timestamps=delta_timestamps)
+dataset = LeRobotDataset(f'lerobot/{env_name}', delta_timestamps=delta_timestamps)
 print(dataset.stats)
 
 cfg = ACTConfig()
@@ -37,10 +44,12 @@ policy = ACTPolicy(cfg, dataset_stats=dataset.stats)
 policy.reset()
 
 step = 0
-if (Path("./outputs/train/aloha_sim_insertion_human/model_12000.safetensors").is_file()):
-    state_dict = safe_load("/Users/msd/Code/experiments/act-tinygrad/outputs/train/aloha_sim_insertion_human/model_12000.safetensors")
-    load_state_dict(policy, state_dict)
-    step = 12000
+if args.model_starting_point:
+    if (Path(args.model_starting_point).is_file()):
+        state_dict = safe_load(args.model_starting_point)
+        load_state_dict(policy, state_dict)
+        if args.model_start_step_count:
+            step = args.model_start_step_count
 policy.model.training = True
 
 if cfg.train_backbone_separately:

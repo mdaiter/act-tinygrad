@@ -13,12 +13,20 @@ from huggingface_hub import snapshot_download
 from config import ACTConfig 
 from act import ACTPolicy
 
+import argparse
+
+parser=argparse.ArgumentParser(description="Argument Parser for ACT testing on simulated environments")
+parser.add_argument("env_name", type=str, choices=['AlohaTransferCube-v0', 'AlohaInsertion-v0'], default='AlohaTransferCube-v0')
+parser.add_argument("model_path", type=str)
+args=parser.parse_args()
+env_name = args.env_name
+
 # Create a directory to store the video of the evaluation
-output_directory = Path("outputs/eval/example_aloha")
+output_directory = Path(f'outputs/eval/example_aloha-{env_name}')
 output_directory.mkdir(parents=True, exist_ok=True)
 
 # load the dict of safe_tensors
-state_dict = safe_load("/Users/msd/Code/experiments/act-tinygrad/outputs/train/aloha_sim_insertion_human/model_30000.safetensors")
+state_dict = safe_load(args.model_path)
 policy = ACTPolicy(ACTConfig())
 load_state_dict(policy, state_dict)
 policy.model.training = False
@@ -27,7 +35,7 @@ policy.model.training = False
 # an image of the scene and state/position of the agent. The environment
 # also automatically stops running after 300 interactions/steps.
 env = gym.make(
-    "gym_aloha/AlohaInsertion-v0",
+    f"gym_aloha/{env_name}",
     obs_type="pixels_agent_pos",
     max_episode_steps=500,
     render_mode="rgb_array",
