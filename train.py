@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+# from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from torch.utils.data import DataLoader
 import torch
 
@@ -17,7 +19,7 @@ from utils import clip_grad_norm_
 import argparse
 # Start of training code
 parser=argparse.ArgumentParser(description="Argument Parser for ACT training on simulated environments")
-parser.add_argument("env_name", type=str, choices=['aloha_sim_transfer_cube_human', 'aloha_sim_insertion_human'], default='aloha_sim_insertion_human')
+parser.add_argument("--env_name", type=str, choices=['aloha_sim_transfer_cube_human', 'aloha_sim_insertion_human'], default='aloha_sim_insertion_human')
 parser.add_argument("--model_starting_point", type=str)
 parser.add_argument("--model_start_step_count", type=int)
 args=parser.parse_args()
@@ -30,17 +32,18 @@ output_directory.mkdir(parents=True, exist_ok=True)
 # Number of offline training steps (we'll only do offline training for this example.)
 # Adjust as you prefer. 5000 steps are needed to get something worth evaluating.
 training_steps = 100000
-log_freq = 1
+log_freq = 10
 
 # Set up the dataset.
 delta_timestamps = {
     "action": [i / 50.0 for i in range(100)],
 }
 dataset = LeRobotDataset(f'lerobot/{env_name}', delta_timestamps=delta_timestamps)
-print(dataset.stats)
+print(dataset.meta.stats)
+
 
 cfg = ACTConfig()
-policy = ACTPolicy(cfg, dataset_stats=dataset.stats)
+policy = ACTPolicy(cfg, dataset_stats=dataset.meta.stats)
 policy.reset()
 
 step = 0
@@ -65,7 +68,7 @@ if hasattr(cfg, 'override_dataset_stats'):
         for stats_type, listconfig in stats_dict.items():
             # example of stats_type: min, max, mean, std
             print(f'listconfig: {listconfig}')
-            dataset.stats[key][stats_type] = torch.tensor(listconfig, dtype=torch.float32)
+            dataset.meta.stats[key][stats_type] = torch.tensor(listconfig, dtype=torch.float32)
 
 if cfg.train_backbone_separately == True:
     opt = nn.optim.AdamW(params_not_backbone, lr=1e-5, weight_decay=1e-4)
@@ -89,6 +92,19 @@ def train_step(
     if cfg.train_backbone_separately:
         opt_backbone.zero_grad()
     loss.backward()
+    ########################################################################
+    # Handle unused parameters by assigning zero gradients
+    optimizers_list = [opt]
+    if cfg.train_backbone_separately:
+        optimizers_list.append(opt_backbone)
+    for optimizer in optimizers_list:
+        for param in optimizer.params:
+            if param.grad is None:
+                # Create zero gradient with same shape and device as parameter
+                param.grad = Tensor.zeros(*param.shape, device=param.device, requires_grad=False)
+
+    ########################################################################
+
     if cfg.train_backbone_separately:
         grad_norm_not_backbone = clip_grad_norm_(params_not_backbone, 10.0)
         grad_norm_backbone = clip_grad_norm_(params_backbone, 10.0)
@@ -118,7 +134,16 @@ done = False
 with Tensor.train():
     while not done:
         for batch in dataloader:
-            batch = {k: Tensor(v.numpy(), requires_grad=False) for k, v in batch.items()}
+            # batch = {k: Tensor(v.numpy(), requires_grad=False) for k, v in batch.items()}
+            batch_converted = {}
+            for k, v in batch.items():
+                if isinstance(v, torch.Tensor):
+                    batch_converted[k] = Tensor(v.detach().cpu().numpy(), requires_grad=False)
+                else:
+                    batch_converted[k] = v  # Keep strings, lists, etc. as-is
+
+            batch = batch_converted
+
             batch = policy.normalize_batch_inputs_and_targets(batch)
             print(f'batch: {batch}')
             info = train_step(

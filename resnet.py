@@ -90,8 +90,10 @@ class ResNet:
 
 class ResNetInstances:
     def resnet18_IMAGENET1K_V1_Generator():
+        import pathlib
         resnet18_IMAGENET1K = ResNet(Block, [2, 2, 2, 2], num_classes=1000)
-        state_dict = nn.state.safe_load("resnet18-f37072fd.safetensors")
+        model_path = pathlib.Path(__file__).parent / "resnet18-f37072fd.safetensors"
+        state_dict = nn.state.safe_load(str(model_path))
         nn.state.load_state_dict(resnet18_IMAGENET1K, state_dict)
         return resnet18_IMAGENET1K
 
