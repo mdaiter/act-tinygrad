@@ -6,7 +6,7 @@ from typing import Callable, Optional, Union, Literal
 import numpy as np
 import tinygrad
 from tinygrad import Tensor, nn, dtypes
-from tinygrad.ops import Variable
+# from tinygrad.ops import Variable
 
 
 from utils import *

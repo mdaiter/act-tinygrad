@@ -16,8 +16,11 @@ from act import ACTPolicy
 import argparse
 
 parser=argparse.ArgumentParser(description="Argument Parser for ACT testing on simulated environments")
-parser.add_argument("env_name", type=str, choices=['AlohaTransferCube-v0', 'AlohaInsertion-v0'], default='AlohaTransferCube-v0')
-parser.add_argument("model_path", type=str)
+# parser.add_argument("--env_name", type=str, choices=['AlohaTransferCube-v0', 'AlohaInsertion-v0'], default='AlohaTransferCube-v0')
+parser.add_argument("--env_name", type=str, choices=['AlohaTransferCube-v0', 'AlohaInsertion-v0'], default='AlohaInsertion-v0')
+# parser.add_argument("--model_path", type=str, default='outputs/train/aloha_sim_transfer_cube_human/model_final.safetensors')
+# parser.add_argument("--model_path", type=str, default='outputs/train/aloha_sim_transfer_cube_human/model_final.safetensors')
+parser.add_argument("--model_path", type=str, default='outputs/train/aloha_sim_insertion_human/model_30000_original.safetensors')
 args=parser.parse_args()
 env_name = args.env_name
 
@@ -115,7 +118,7 @@ if __name__ == "__main__":
     fps = env.metadata["render_fps"]
 
     # Encode all frames into a mp4 video.
-    video_path = output_directory / "rollout.mp4"
+    video_path = output_directory / "rollout3.mp4"
     imageio.mimsave(str(video_path), numpy.stack(frames), fps=fps)
 
     print(f"Video of the evaluation is available in '{video_path}'.")

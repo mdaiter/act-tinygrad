@@ -52,14 +52,28 @@ def create_stats_buffers(
             # unnormalization). See the logic here
             # https://github.com/huggingface/safetensors/blob/079781fd0dc455ba0fe851e2b4507c33d0c0d407/bindings/python/py_src/safetensors/torch.py#L97.
             if mode == "mean_std":
-                buffer["mean"].assign(stats[key]["mean"].numpy())
+                mean_val = stats[key]["mean"]
+                std_val = stats[key]["std"]
+                # Convert to numpy if needed (handle both numpy arrays and torch tensors)
+                if hasattr(mean_val, 'numpy'):
+                    mean_val = mean_val.numpy()
+                if hasattr(std_val, 'numpy'):
+                    std_val = std_val.numpy()
+                buffer["mean"].assign(mean_val)
                 buffer["mean"].requires_grad = False
-                buffer["std"].assign(stats[key]["std"].numpy())
+                buffer["std"].assign(std_val)
                 buffer["std"].requires_grad = False
             elif mode == "min_max":
-                buffer["min"].assign(stats[key]["min"].numpy())
+                min_val = stats[key]["min"]
+                max_val = stats[key]["max"]
+                # Convert to numpy if needed (handle both numpy arrays and torch tensors)
+                if hasattr(min_val, 'numpy'):
+                    min_val = min_val.numpy()
+                if hasattr(max_val, 'numpy'):
+                    max_val = max_val.numpy()
+                buffer["min"].assign(min_val)
                 buffer["min"].requires_grad = False
-                buffer["max"].assign(stats[key]["max"].numpy())
+                buffer["max"].assign(max_val)
                 buffer["max"].requires_grad = False
 
         stats_buffers[key] = buffer

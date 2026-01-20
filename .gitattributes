@@ -4,3 +4,4 @@
 outputs/train/aloha_sim_transfer_cube_human/model_10000.safetensors filter=lfs diff=lfs merge=lfs -text
 resnet18-f37072fd.safetensors filter=lfs diff=lfs merge=lfs -text
 outputs/train/act_aloha_sim_transfer_cube_human/model_10000.safetensors filter=lfs diff=lfs merge=lfs -text
+*.ipynb filter=lfs diff=lfs merge=lfs -text
