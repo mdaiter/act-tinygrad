@@ -1,3 +1,4 @@
+import numpy as np
 from tinygrad import Tensor, nn, dtypes
 
 def create_stats_buffers(
@@ -52,14 +53,14 @@ def create_stats_buffers(
             # unnormalization). See the logic here
             # https://github.com/huggingface/safetensors/blob/079781fd0dc455ba0fe851e2b4507c33d0c0d407/bindings/python/py_src/safetensors/torch.py#L97.
             if mode == "mean_std":
-                buffer["mean"].assign(stats[key]["mean"].numpy())
+                buffer["mean"].assign(np.asarray(stats[key]["mean"]))
                 buffer["mean"].requires_grad = False
-                buffer["std"].assign(stats[key]["std"].numpy())
+                buffer["std"].assign(np.asarray(stats[key]["std"]))
                 buffer["std"].requires_grad = False
             elif mode == "min_max":
-                buffer["min"].assign(stats[key]["min"].numpy())
+                buffer["min"].assign(np.asarray(stats[key]["min"]))
                 buffer["min"].requires_grad = False
-                buffer["max"].assign(stats[key]["max"].numpy())
+                buffer["max"].assign(np.asarray(stats[key]["max"]))
                 buffer["max"].requires_grad = False
 
         stats_buffers[key] = buffer
