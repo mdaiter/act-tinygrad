@@ -16,8 +16,9 @@ from act import ACTPolicy
 import argparse
 
 parser=argparse.ArgumentParser(description="Argument Parser for ACT testing on simulated environments")
-parser.add_argument("env_name", type=str, choices=['AlohaTransferCube-v0', 'AlohaInsertion-v0'], default='AlohaTransferCube-v0')
-parser.add_argument("model_path", type=str)
+parser.add_argument("--env_name", type=str, choices=['AlohaTransferCube-v0', 'AlohaInsertion-v0'], default='AlohaInsertion-v0')
+parser.add_argument("--model_path", type=str, default='outputs/train/aloha_sim_insertion_human/model_50000.safetensors')
+# parser.add_argument("--model_path", type=str, default='outputs/train/aloha_sim_transfer_cube_human/model_30000.safetensors')
 args=parser.parse_args()
 env_name = args.env_name
 
